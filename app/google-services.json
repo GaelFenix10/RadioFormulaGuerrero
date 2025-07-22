@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "549326488100",
+    "project_id": "radioformula-guerrero",
+    "storage_bucket": "radioformula-guerrero.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:549326488100:android:2daddd24ff08adf50c0eb1",
+        "android_client_info": {
+          "package_name": "com.example.radioformulaguerrero"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDDSiuKYZufKS-Kf7QMzbgjOMEPYidLlVk"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
