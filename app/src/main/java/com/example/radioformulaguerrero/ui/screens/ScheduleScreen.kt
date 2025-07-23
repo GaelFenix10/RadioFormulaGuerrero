@@ -24,6 +24,10 @@ import com.google.firebase.firestore.FirebaseFirestore
 import kotlinx.coroutines.tasks.await
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.material.icons.filled.Add
+import coil.compose.AsyncImage
+import androidx.compose.ui.unit.sp
+import com.example.radioformulaguerrero.data.obtenerProgramacionGenerica
+import kotlinx.coroutines.launch
 
 @Composable
 fun ScheduleScreen(navController: NavController) {
@@ -38,10 +42,10 @@ fun ScheduleScreen(navController: NavController, viewModel: MainViewModel) {
 
 @Composable
 private fun ScheduleScreenContent(navController: NavController, viewModel: MainViewModel) {
-    val programacion by viewModel.programacion.collectAsState()
-    val isLoading by viewModel.isLoading.collectAsState()
-    val error by viewModel.error.collectAsState()
     val context = LocalContext.current
+    var programacion by remember { mutableStateOf<List<Map<String, Any?>>>(emptyList()) }
+    var isLoading by remember { mutableStateOf(false) }
+    var error by remember { mutableStateOf<String?>(null) }
     var showDialog by remember { mutableStateOf(false) }
     var isAdmin by remember { mutableStateOf(false) }
 
@@ -53,6 +57,21 @@ private fun ScheduleScreenContent(navController: NavController, viewModel: MainV
             isAdmin = doc.getBoolean("isAdmin") == true
         }
     }
+
+    // Obtener programación genérica
+    LaunchedEffect(Unit) {
+        isLoading = true
+        error = null
+        try {
+            programacion = obtenerProgramacionGenerica()
+        } catch (e: Exception) {
+            error = e.message
+        } finally {
+            isLoading = false
+        }
+    }
+
+    val scope = rememberCoroutineScope()
 
     Box(Modifier.fillMaxSize()) {
         Column(
@@ -72,7 +91,19 @@ private fun ScheduleScreenContent(navController: NavController, viewModel: MainV
                     style = MaterialTheme.typography.headlineMedium
                 )
                 IconButton(
-                    onClick = { viewModel.cargarDatos() },
+                    onClick = {
+                        isLoading = true
+                        error = null
+                        scope.launch {
+                            try {
+                                programacion = obtenerProgramacionGenerica()
+                            } catch (e: Exception) {
+                                error = e.message
+                            } finally {
+                                isLoading = false
+                            }
+                        }
+                    },
                     enabled = !isLoading
                 ) {
                     Icon(
@@ -84,7 +115,6 @@ private fun ScheduleScreenContent(navController: NavController, viewModel: MainV
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // Estado de carga
             if (isLoading) {
                 Box(
                     modifier = Modifier.fillMaxSize(),
@@ -92,9 +122,7 @@ private fun ScheduleScreenContent(navController: NavController, viewModel: MainV
                 ) {
                     CircularProgressIndicator()
                 }
-            }
-            // Estado de error
-            else if (error != null) {
+            } else if (error != null) {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     colors = CardDefaults.cardColors(
@@ -117,18 +145,25 @@ private fun ScheduleScreenContent(navController: NavController, viewModel: MainV
                         )
                         Spacer(modifier = Modifier.height(8.dp))
                         Button(
-                            onClick = { 
-                                viewModel.limpiarError()
-                                viewModel.cargarDatos()
+                            onClick = {
+                                isLoading = true
+                                error = null
+                                scope.launch {
+                                    try {
+                                        programacion = obtenerProgramacionGenerica()
+                                    } catch (e: Exception) {
+                                        error = e.message
+                                    } finally {
+                                        isLoading = false
+                                    }
+                                }
                             }
                         ) {
                             Text("Reintentar")
                         }
                     }
                 }
-            }
-            // Contenido principal
-            else {
+            } else {
                 LazyColumn(
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
@@ -157,8 +192,8 @@ private fun ScheduleScreenContent(navController: NavController, viewModel: MainV
                             }
                         }
                     } else {
-                        items(programacion) { programa ->
-                            ProgramCard(programa)
+                        items(programacion) { prog ->
+                            ProgramCardGenerica(prog)
                         }
                     }
                 }
@@ -204,7 +239,7 @@ private fun ScheduleScreenContent(navController: NavController, viewModel: MainV
 }
 
 @Composable
-fun ProgramCard(programa: com.example.radioformulaguerrero.model.Programa) {
+fun ProgramCardGenerica(prog: Map<String, Any?>) {
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -216,23 +251,30 @@ fun ProgramCard(programa: com.example.radioformulaguerrero.model.Programa) {
                 .fillMaxWidth()
                 .padding(16.dp)
         ) {
+            val imagenUrl = prog["imagenUrl"] as? String ?: ""
+            if (imagenUrl.isNotBlank()) {
+                AsyncImage(
+                    model = imagenUrl,
+                    contentDescription = "Imagen del programa",
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(180.dp)
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+            }
+            val titulo = prog["programa"] as? String ?: prog["id"] as? String ?: "(Sin título)"
             Text(
-                text = programa.programa,
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.onSurface
+                text = titulo,
+                style = MaterialTheme.typography.titleLarge.copy(fontSize = 22.sp)
             )
             Spacer(modifier = Modifier.height(4.dp))
-            Text(
-                text = "${programa.horaInicio} - ${programa.horaFin}",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            if (programa.descripcion.isNotEmpty()) {
-                Text(
-                    text = programa.descripcion,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+            prog.forEach { (key, value) ->
+                if (key != "imagenUrl" && key != "programa" && key != "id" && value is String && value.isNotBlank()) {
+                    Text(
+                        text = "$key: $value",
+                        style = MaterialTheme.typography.bodyLarge.copy(fontSize = 18.sp)
+                    )
+                }
             }
         }
     }

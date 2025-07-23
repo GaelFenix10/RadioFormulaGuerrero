@@ -25,9 +25,11 @@ import coil.compose.AsyncImage
 import androidx.compose.ui.platform.LocalContext
 import android.content.Intent
 import android.net.Uri
+import android.util.Log
 
 @Composable
 fun HomeScreen() {
+    Log.d("Pantalla", "Entrando a HomeScreen")
     val viewModel: MainViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
     HomeScreenContent(viewModel)
 }

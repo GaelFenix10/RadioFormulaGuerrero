@@ -14,6 +14,12 @@ import androidx.compose.foundation.clickable
 import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.rememberScrollState
+import com.example.radioformulaguerrero.model.Publicacion
+import com.example.radioformulaguerrero.data.obtenerPublicaciones
+import com.example.radioformulaguerrero.data.actualizarPublicacion
+import com.example.radioformulaguerrero.data.eliminarPublicacion
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.tasks.await
 
 @Composable
 fun AdminNav() {
@@ -25,6 +31,31 @@ fun AdminNav() {
     var newsurl by remember { mutableStateOf("") }
     val scrollState = rememberScrollState()
     var expanded by remember { mutableStateOf(true) }
+    val scope = rememberCoroutineScope()
+    var publicaciones by remember { mutableStateOf<List<Pair<String, Publicacion>>>(emptyList()) }
+    var isLoading by remember { mutableStateOf(false) }
+    var error by remember { mutableStateOf<String?>(null) }
+    var showEditDialog by remember { mutableStateOf(false) }
+    var publicacionAEditar by remember { mutableStateOf<Pair<String, Publicacion>?>(null) }
+
+    // Cargar publicaciones
+    LaunchedEffect(Unit) {
+        isLoading = true
+        error = null
+        try {
+            val db = com.google.firebase.firestore.FirebaseFirestore.getInstance()
+            val snapshot = db.collection("quejas").orderBy("fecha", com.google.firebase.firestore.Query.Direction.DESCENDING).get().await()
+            publicaciones = snapshot.documents.mapNotNull { doc ->
+                val pub = doc.toObject(Publicacion::class.java)
+                if (pub != null) doc.id to pub else null
+            }
+        } catch (e: Exception) {
+            error = "Error al cargar publicaciones: ${e.message}"
+        } finally {
+            isLoading = false
+        }
+    }
+
     Column(modifier = Modifier.fillMaxSize().padding(16.dp).verticalScroll(scrollState)) {
         Text("Panel de administración (AdminNav)", style = MaterialTheme.typography.titleMedium)
         Card(
@@ -77,7 +108,7 @@ fun AdminNav() {
                             val nueva = com.example.radioformulaguerrero.model.Publicacion(
                                 titulo = titulo,
                                 descripcion = descripcion,
-                                fecha = Timestamp.now(),
+                                fecha = com.google.firebase.Timestamp.now(),
                                 imagenUrl = imagenUrl,
                                 newsurl = newsurl
                             )
@@ -88,6 +119,16 @@ fun AdminNav() {
                                     descripcion = ""
                                     imagenUrl = ""
                                     newsurl = ""
+                                    // Recargar publicaciones
+                                    scope.launch {
+                                        isLoading = true
+                                        val snapshot = db.collection("quejas").orderBy("fecha", com.google.firebase.firestore.Query.Direction.DESCENDING).get().await()
+                                        publicaciones = snapshot.documents.mapNotNull { doc ->
+                                            val pub = doc.toObject(Publicacion::class.java)
+                                            if (pub != null) doc.id to pub else null
+                                        }
+                                        isLoading = false
+                                    }
                                 }
                                 .addOnFailureListener { e ->
                                     isSaving = false
@@ -112,6 +153,99 @@ fun AdminNav() {
                     Text("Crear nueva publicación (expandir para ver el formulario)", style = MaterialTheme.typography.bodyMedium)
                 }
             }
+        }
+        Divider()
+        // Mostrar publicaciones existentes
+        Text("Publicaciones existentes", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 8.dp, bottom = 8.dp))
+        if (isLoading) {
+            CircularProgressIndicator()
+        } else if (error != null) {
+            Text(error!!, color = MaterialTheme.colorScheme.error)
+        } else if (publicaciones.isEmpty()) {
+            Text("No hay publicaciones")
+        } else {
+            publicaciones.forEach { (docId, pub) ->
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 4.dp),
+                    elevation = CardDefaults.cardElevation(2.dp)
+                ) {
+                    Column(Modifier.padding(12.dp)) {
+                        Text(pub.titulo, style = MaterialTheme.typography.titleMedium)
+                        Text(pub.descripcion, style = MaterialTheme.typography.bodyMedium)
+                        if (pub.imagenUrl.isNotBlank()) {
+                            Text("Imagen: ${pub.imagenUrl}", style = MaterialTheme.typography.bodySmall)
+                        }
+                        if (pub.newsurl.isNotBlank()) {
+                            Text("Noticia: ${pub.newsurl}", style = MaterialTheme.typography.bodySmall)
+                        }
+                        Row(Modifier.padding(top = 8.dp)) {
+                            Button(onClick = {
+                                publicacionAEditar = docId to pub
+                                showEditDialog = true
+                            }) {
+                                Text("Editar")
+                            }
+                            Spacer(Modifier.width(8.dp))
+                            Button(onClick = {
+                                // Confirmar y eliminar
+                                scope.launch {
+                                    isLoading = true
+                                    eliminarPublicacion(docId,
+                                        onSuccess = {
+                                            publicaciones = publicaciones.filterNot { it.first == docId }
+                                            isLoading = false
+                                        },
+                                        onError = { e ->
+                                            error = "Error al eliminar: ${e.message}"
+                                            isLoading = false
+                                        }
+                                    )
+                                }
+                            }, colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)) {
+                                Text("Eliminar", color = MaterialTheme.colorScheme.onError)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        // Diálogo de edición
+        if (showEditDialog && publicacionAEditar != null) {
+            AlertDialog(
+                onDismissRequest = { showEditDialog = false },
+                title = { Text("Editar publicación") },
+                text = {
+                    EditarPublicacionScreen(
+                        publicacion = publicacionAEditar!!.second,
+                        onGuardar = { nueva ->
+                            scope.launch {
+                                isLoading = true
+                                actualizarPublicacion(
+                                    docId = publicacionAEditar!!.first,
+                                    nuevaPublicacion = nueva,
+                                    onSuccess = {
+                                        publicaciones = publicaciones.map {
+                                            if (it.first == publicacionAEditar!!.first) it.first to nueva else it
+                                        }
+                                        isLoading = false
+                                        showEditDialog = false
+                                    },
+                                    onError = { e ->
+                                        error = "Error al actualizar: ${e.message}"
+                                        isLoading = false
+                                    }
+                                )
+                            }
+                        }
+                    )
+                },
+                confirmButton = {},
+                dismissButton = {
+                    OutlinedButton(onClick = { showEditDialog = false }) { Text("Cancelar") }
+                }
+            )
         }
     }
 } 

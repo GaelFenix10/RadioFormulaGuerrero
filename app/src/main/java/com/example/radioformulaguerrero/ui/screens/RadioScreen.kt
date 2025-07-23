@@ -16,9 +16,11 @@ import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.Alignment
+import android.util.Log
 
 @Composable
 fun RadioScreen(navController: NavController) {
+    Log.d("Pantalla", "Entrando a RadioScreen")
     var isLoading by remember { mutableStateOf(true) }
     val context = LocalContext.current
 

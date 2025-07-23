@@ -35,208 +35,203 @@ import androidx.compose.material.icons.filled.Refresh
 import com.example.radioformulaguerrero.ui.viewmodels.MainViewModel
 import java.text.SimpleDateFormat
 import java.util.*
+import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.firestore.FirebaseFirestore
+import kotlinx.coroutines.tasks.await
+import androidx.compose.foundation.clickable
+import androidx.compose.ui.unit.sp
+import android.util.Log
 
 @Composable
 fun ComplaintsScreen(navController: NavController) {
-    val viewModel: MainViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
-    ComplaintsScreenContent(navController, viewModel)
+    Log.d("Pantalla", "Entrando a ComplaintsScreen")
+    val context = LocalContext.current
+    val sharedPreferences = context.getSharedPreferences("login_prefs", Context.MODE_PRIVATE)
+    val role = sharedPreferences.getString("role", "user")
+    if (role == "admin") {
+        AdminDenunciasScreen()
+    } else {
+        UserDenunciaScreen(context, sharedPreferences)
+    }
 }
 
 @Composable
-fun ComplaintsScreen(navController: NavController, viewModel: MainViewModel) {
-    ComplaintsScreenContent(navController, viewModel)
-}
-
-@Composable
-private fun ComplaintsScreenContent(navController: NavController, viewModel: MainViewModel) {
-    val publicaciones by viewModel.publicaciones.collectAsState()
-    val isLoading by viewModel.isLoading.collectAsState()
-    val error by viewModel.error.collectAsState()
-    
+fun UserDenunciaScreen(context: android.content.Context, sharedPreferences: android.content.SharedPreferences) {
     var showForm by remember { mutableStateOf(false) }
-    var name by remember { mutableStateOf("") }
-    var complaint by remember { mutableStateOf("") }
+    var titular by remember { mutableStateOf("") }
+    var detalle by remember { mutableStateOf("") }
+    var isSending by remember { mutableStateOf(false) }
+    var sendError by remember { mutableStateOf<String?>(null) }
+    var sendSuccess by remember { mutableStateOf(false) }
+    val correo = sharedPreferences.getString("email", "") ?: ""
+    val telefono = sharedPreferences.getString("telefono", "") ?: ""
+    val nombre = sharedPreferences.getString("nombre", "") ?: ""
+    val fechaNacimiento = sharedPreferences.getString("fechaNacimiento", "") ?: ""
+    val edad = sharedPreferences.getString("edad", "") ?: ""
 
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
             .padding(16.dp)
     ) {
-        // Header
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                text = "Quejas y Denuncias",
-                style = MaterialTheme.typography.headlineMedium
-            )
-            IconButton(
-                onClick = { viewModel.cargarDatos() },
-                enabled = !isLoading
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Refresh,
-                    contentDescription = "Actualizar"
-                )
-            }
-        }
-
+        Text("Quejas y Denuncias", style = MaterialTheme.typography.headlineMedium)
         Spacer(modifier = Modifier.height(16.dp))
-
-        // Botón para mostrar/ocultar formulario
-        Button(
-            onClick = { showForm = !showForm },
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Text(if (showForm) "Ocultar formulario" else "Nueva queja")
+        Button(onClick = { showForm = !showForm }, modifier = Modifier.fillMaxWidth()) {
+            Text(if (showForm) "Ocultar formulario" else "Nueva denuncia")
         }
-
         Spacer(modifier = Modifier.height(16.dp))
-
-        // Formulario de queja
         if (showForm) {
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceVariant
-                )
-            ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp)
-                ) {
-                    Text(
-                        text = "Fórmula abriendo la conversación",
-                        style = MaterialTheme.typography.titleMedium,
-                        modifier = Modifier.padding(bottom = 8.dp)
-                    )
-
-                    Text(
-                        text = "Servicios sociales, quejas, denuncias, etc.",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(bottom = 16.dp)
-                    )
-
+            Card(Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(16.dp)) {
                     OutlinedTextField(
-                        value = name,
-                        onValueChange = { name = it },
-                        label = { Text("Nombre") },
+                        value = titular,
+                        onValueChange = { titular = it },
+                        label = { Text("Titular") },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    OutlinedTextField(
+                        value = detalle,
+                        onValueChange = { detalle = it },
+                        label = { Text("Detalle de la denuncia") },
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(bottom = 16.dp)
-                    )
-
-                    OutlinedTextField(
-                        value = complaint,
-                        onValueChange = { complaint = it },
-                        label = { Text("Mensaje") },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(150.dp)
-                            .padding(bottom = 16.dp),
+                            .height(120.dp),
                         maxLines = 6
                     )
-
+                    if (sendError != null) {
+                        Text(sendError!!, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(top = 8.dp))
+                    }
+                    if (sendSuccess) {
+                        Text("Denuncia enviada correctamente", color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(top = 8.dp))
+                    }
                     Button(
-                        onClick = { /* TODO: Implementar envío */ },
-                        modifier = Modifier.fillMaxWidth(),
-                        enabled = name.isNotEmpty() && complaint.isNotEmpty()
+                        onClick = {
+                            isSending = true
+                            sendError = null
+                            sendSuccess = false
+                            val db = FirebaseFirestore.getInstance()
+                            val denuncia = hashMapOf(
+                                "titular" to titular,
+                                "detalle" to detalle,
+                                "correo" to correo,
+                                "telefono" to telefono,
+                                "nombre" to nombre,
+                                "fechaNacimiento" to fechaNacimiento,
+                                "edad" to edad,
+                                "fecha" to com.google.firebase.Timestamp.now()
+                            )
+                            db.collection("denuncias").add(denuncia)
+                                .addOnSuccessListener {
+                                    isSending = false
+                                    sendSuccess = true
+                                    titular = ""
+                                    detalle = ""
+                                }
+                                .addOnFailureListener { e ->
+                                    isSending = false
+                                    sendError = "Error al enviar denuncia: ${e.message}"
+                                }
+                        },
+                        enabled = titular.isNotBlank() && detalle.isNotBlank() && !isSending,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 12.dp)
                     ) {
-                        Text("Enviar mensaje")
+                        if (isSending) {
+                            CircularProgressIndicator(modifier = Modifier.size(20.dp))
+                        } else {
+                            Text("Enviar denuncia")
+                        }
                     }
                 }
             }
-            
-            Spacer(modifier = Modifier.height(16.dp))
         }
+    }
+}
 
-        // Lista de quejas existentes
-        Text(
-            text = "Quejas recientes",
-            style = MaterialTheme.typography.titleMedium,
-            modifier = Modifier.padding(bottom = 8.dp)
-        )
-
-        // Estado de carga
+@Composable
+fun AdminDenunciasScreen() {
+    var denuncias by remember { mutableStateOf<List<Map<String, Any?>>>(emptyList()) }
+    var isLoading by remember { mutableStateOf(false) }
+    var error by remember { mutableStateOf<String?>(null) }
+    val correosCache = remember { mutableStateMapOf<String, String>() }
+    LaunchedEffect(Unit) {
+        isLoading = true
+        error = null
+        try {
+            val db = FirebaseFirestore.getInstance()
+            val snapshot = db.collection("denuncias").orderBy("fecha", com.google.firebase.firestore.Query.Direction.DESCENDING).get().await()
+            denuncias = snapshot.documents.map { doc ->
+                val data = doc.data ?: emptyMap()
+                val mutable = data.toMutableMap()
+                mutable["id"] = doc.id
+                mutable
+            }
+        } catch (e: Exception) {
+            error = "Error al cargar denuncias: ${e.message}"
+        } finally {
+            isLoading = false
+        }
+    }
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(16.dp)
+    ) {
+        Text("Denuncias recibidas", style = MaterialTheme.typography.headlineMedium)
+        Spacer(modifier = Modifier.height(16.dp))
         if (isLoading) {
-            Box(
-                modifier = Modifier.fillMaxSize(),
-                contentAlignment = Alignment.Center
-            ) {
-                CircularProgressIndicator()
-            }
-        }
-        // Estado de error
-        else if (error != null) {
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.errorContainer
-                )
-            ) {
-                Column(
-                    modifier = Modifier.padding(16.dp)
-                ) {
-                    Text(
-                        text = "Error",
-                        style = MaterialTheme.typography.titleMedium,
-                        color = MaterialTheme.colorScheme.onErrorContainer
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        text = error!!,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onErrorContainer
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Button(
-                        onClick = { 
-                            viewModel.limpiarError()
-                            viewModel.cargarDatos()
+            CircularProgressIndicator()
+        } else if (error != null) {
+            Text(error!!, color = MaterialTheme.colorScheme.error)
+        } else if (denuncias.isEmpty()) {
+            Text("No hay denuncias")
+        } else {
+            denuncias.forEachIndexed { idx, denuncia ->
+                var expanded by remember { mutableStateOf(false) }
+                var correo by remember { mutableStateOf(denuncia["email"] as? String ?: denuncia["correo"] as? String ?: "") }
+                val userId = denuncia["id"] as? String
+                // Si no hay correo, buscarlo en usernoadmin
+                LaunchedEffect(expanded) {
+                    if (expanded && correo.isBlank() && userId != null && !correosCache.containsKey(userId)) {
+                        try {
+                            val db = FirebaseFirestore.getInstance()
+                            val userDoc = db.collection("usernoadmin").document(userId).get().await()
+                            val userEmail = userDoc.getString("email") ?: "-"
+                            correosCache[userId] = userEmail
+                            correo = userEmail
+                        } catch (_: Exception) {
+                            correo = "-"
                         }
-                    ) {
-                        Text("Reintentar")
+                    } else if (expanded && userId != null && correosCache.containsKey(userId)) {
+                        correo = correosCache[userId] ?: "-"
                     }
                 }
-            }
-        }
-        // Lista de quejas
-        else {
-            LazyColumn(
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                if (publicaciones.isEmpty()) {
-                    item {
-                        Card(
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Column(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(16.dp),
-                                horizontalAlignment = Alignment.CenterHorizontally
-                            ) {
-                                Text(
-                                    text = "No hay quejas disponibles",
-                                    style = MaterialTheme.typography.bodyLarge
-                                )
-                                Spacer(modifier = Modifier.height(8.dp))
-                                Text(
-                                    text = "Pulsa el botón de actualizar para cargar quejas",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 8.dp)
+                        .clickable { expanded = !expanded },
+                    elevation = CardDefaults.cardElevation(2.dp)
+                ) {
+                    Column(Modifier.padding(12.dp)) {
+                        Text(
+                            denuncia["titular"] as? String ?: "(Sin titular)",
+                            style = MaterialTheme.typography.titleLarge.copy(fontSize = 22.sp)
+                        )
+                        if (expanded) {
+                            Text("Numero de denuncia: ${idx + 1}", style = MaterialTheme.typography.bodyLarge.copy(fontSize = 18.sp))
+                            Text("ID: ${denuncia["id"] ?: "-"}", style = MaterialTheme.typography.bodyLarge.copy(fontSize = 18.sp))
+                            Text("Fecha: ${(denuncia["fecha"] as? com.google.firebase.Timestamp)?.toDate()?.toString() ?: "-"}", style = MaterialTheme.typography.bodyLarge.copy(fontSize = 18.sp))
+                            Text("Nombre: ${denuncia["nombre"] ?: "-"}", style = MaterialTheme.typography.bodyLarge.copy(fontSize = 18.sp))
+                            Text("Teléfono: ${denuncia["telefono"] ?: "-"}", style = MaterialTheme.typography.bodyLarge.copy(fontSize = 18.sp))
+                            Text("Fecha de nacimiento: ${denuncia["fechaNacimiento"] ?: "-"}", style = MaterialTheme.typography.bodyLarge.copy(fontSize = 18.sp))
+                            Text("Edad: ${denuncia["edad"] ?: "-"}", style = MaterialTheme.typography.bodyLarge.copy(fontSize = 18.sp))
+                            Text("Noticia detallada: ${denuncia["detalle"] ?: "-"}", style = MaterialTheme.typography.bodyLarge.copy(fontSize = 18.sp))
+                        } else {
+                            Text("(Toca para ver más detalles)", style = MaterialTheme.typography.bodyLarge.copy(fontSize = 16.sp), color = MaterialTheme.colorScheme.primary)
                         }
-                    }
-                } else {
-                    items(publicaciones) { publicacion ->
-                        ComplaintCard(publicacion)
                     }
                 }
             }

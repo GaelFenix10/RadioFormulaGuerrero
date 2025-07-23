@@ -27,32 +27,17 @@ suspend fun obtenerPublicaciones(): List<Publicacion> {
     }
 }
 
-suspend fun obtenerProgramacion(): List<Programa> {
+suspend fun obtenerProgramacionGenerica(): List<Map<String, Any?>> {
     val db = FirebaseFirestore.getInstance()
-    Log.d("FIREBASE", "Iniciando obtención de programación...")
-
     return try {
-        Log.d("FIREBASE", "Consultando colección 'programacion' en Firestore...")
-        val snapshot = db.collection("programacion")
-            .get()
-            .await()
-
-        Log.d("FIREBASE", "Documentos recibidos: ${snapshot.documents.size}")
-
-        val lista = snapshot.documents.mapNotNull { document ->
-            val programa = document.toObject(Programa::class.java)
-            if (programa != null) {
-                Log.d("FIREBASE", "Documento leído: ${document.id} -> $programa")
-            } else {
-                Log.w("FIREBASE", "Documento ${document.id} no se pudo convertir a Programa")
-            }
-            programa
+        val snapshot = db.collection("programacion").get().await()
+        snapshot.documents.map { doc ->
+            val data = doc.data ?: emptyMap()
+            val mutable = data.toMutableMap()
+            mutable["id"] = doc.id
+            mutable
         }
-
-        Log.d("FIREBASE", "Total de programas válidos: ${lista.size}")
-        lista
     } catch (e: Exception) {
-        Log.e("FIREBASE_ERROR", "Error obteniendo programación", e)
         emptyList()
     }
 }

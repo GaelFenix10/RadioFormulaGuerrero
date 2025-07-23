@@ -15,6 +15,7 @@ import androidx.compose.ui.platform.LocalContext
 import android.content.Context
 import com.google.firebase.auth.FirebaseAuth
 import android.util.Log
+import com.google.firebase.firestore.FirebaseFirestore
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -82,14 +83,54 @@ fun LoginScreen(navController: NavController) {
                 val auth = FirebaseAuth.getInstance()
                 auth.signInWithEmailAndPassword(email, password)
                     .addOnCompleteListener { task ->
-                        isLoading = false
                         if (task.isSuccessful) {
-                            Log.d("LOGIN", "Credenciales correctas, redireccionando")
-                            navController.navigate("mainauthnav") {
-                                popUpTo("login") { inclusive = true }
+                            val user = auth.currentUser
+                            if (user != null) {
+                                val db = FirebaseFirestore.getInstance()
+                                val uid = user.uid
+                                // Primero buscar en 'usuarios' (admin)
+                                db.collection("usuarios").document(uid).get()
+                                    .addOnSuccessListener { docAdmin ->
+                                        if (docAdmin.exists()) {
+                                            // Es admin
+                                            isLoading = false
+                                            sharedPreferences.edit().putString("role", "admin").apply()
+                                            navController.navigate("home") {
+                                                popUpTo("login") { inclusive = true }
+                                            }
+                                        } else {
+                                            // Buscar en 'usernoadmin'
+                                            db.collection("usernoadmin").document(uid).get()
+                                                .addOnSuccessListener { docUser ->
+                                                    isLoading = false
+                                                    if (docUser.exists()) {
+                                                        sharedPreferences.edit().putString("role", "user").apply()
+                                                        navController.navigate("home") {
+                                                            popUpTo("login") { inclusive = true }
+                                                        }
+                                                    } else {
+                                                        error = "No tienes permisos para acceder."
+                                                        auth.signOut()
+                                                    }
+                                                }
+                                                .addOnFailureListener { e ->
+                                                    isLoading = false
+                                                    error = "Error al validar usuario: ${e.message}"
+                                                    auth.signOut()
+                                                }
+                                        }
+                                    }
+                                    .addOnFailureListener { e ->
+                                        isLoading = false
+                                        error = "Error al validar usuario: ${e.message}"
+                                        auth.signOut()
+                                    }
+                            } else {
+                                isLoading = false
+                                error = "Error de autenticación."
                             }
                         } else {
-                            Log.e("LOGIN", "Error: ${task.exception?.message}")
+                            isLoading = false
                             error = "Correo o contraseña incorrectos"
                         }
                     }
@@ -107,6 +148,10 @@ fun LoginScreen(navController: NavController) {
             } else {
                 Text("Iniciar sesión")
             }
+        }
+        Spacer(modifier = Modifier.height(16.dp))
+        TextButton(onClick = { navController.navigate("register") }) {
+            Text("¿No tienes una cuenta? Crear una", color = MaterialTheme.colorScheme.primary)
         }
     }
 } 

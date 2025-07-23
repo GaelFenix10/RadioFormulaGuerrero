@@ -3,9 +3,7 @@ package com.example.radioformulaguerrero.ui.viewmodels
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.radioformulaguerrero.data.obtenerPublicaciones
-import com.example.radioformulaguerrero.data.obtenerProgramacion
 import com.example.radioformulaguerrero.model.Publicacion
-import com.example.radioformulaguerrero.model.Programa
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -15,9 +13,6 @@ class MainViewModel : ViewModel() {
     
     private val _publicaciones = MutableStateFlow<List<Publicacion>>(emptyList())
     val publicaciones: StateFlow<List<Publicacion>> = _publicaciones.asStateFlow()
-    
-    private val _programacion = MutableStateFlow<List<Programa>>(emptyList())
-    val programacion: StateFlow<List<Programa>> = _programacion.asStateFlow()
     
     private val _isLoading = MutableStateFlow(false)
     val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
@@ -35,9 +30,8 @@ class MainViewModel : ViewModel() {
                 _isLoading.value = true
                 _error.value = null
 
-                // Llamadas secuenciales a Firestore
+                // Solo publicaciones
                 _publicaciones.value = obtenerPublicaciones()
-                _programacion.value = obtenerProgramacion()
 
             } catch (e: Exception) {
                 _error.value = "Error al cargar datos: ${e.message}"
